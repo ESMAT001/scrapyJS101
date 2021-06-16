@@ -6,6 +6,7 @@ const lastPage = 1395
 
 const spider = scrapyJS(baseURL,firstPage,lastPage,{
     nameSelector:'div.content > div > p',
+    downloadLinkSelector:"div.content > *",
     mainPageLinkSelector:'div.title > h2 > a'
 })
 

@@ -6,6 +6,11 @@ const { JSDOM } = jsdom;
 
 
 const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = {}) {
+    let threads = 0
+    const maxThreads=options.maxThreads || 8
+    const retryLimit = options.retryLimit || 40
+    const timeOutLimit = options.timeOutLimit * 1000 || 20 * 1000
+
 
     const getPage = (function* nextPage() {
         let index = firstPage;
@@ -35,10 +40,13 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
     async function* scrapeMainPage(url) {
 
         try {
-            var html = await got(url)
+            var html = await got(url, {
+                retry: { limit: retryLimit },
+                timeout: timeOutLimit
+            })
         } catch (error) {
             return callbacks.onError({
-                error: error.response.body,
+                error,
                 url
             })
         }
@@ -52,13 +60,29 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
 
     async function crawlSinglePage(url, page) {
         try {
-            var html = await got(url)
+
+            var html = await got(url, {
+                retry: { limit: retryLimit },
+                timeout: timeOutLimit
+            })
             const dom = new JSDOM(html.body)
             const movieName = dom.window.document.querySelector(options.nameSelector).textContent
-            return callbacks.onCrawled({ 'from page': page, movieName })
+            const nodes = dom.window.document.querySelectorAll(options.downloadLinkSelector)
+            let startIndex = null
+            let endIndex = null
+            for (let index = 0; index < nodes.length; index++) {
+                if (nodes[index].nodeName === "H3" && startIndex === null) {
+                    startIndex = ++index
+                } else if (nodes[index].nodeName === "HR" && endIndex === null) {
+                    endIndex = index
+                }
+            }
+            const downloadLinks = Array.from(nodes).slice(startIndex, endIndex);
+
+            return callbacks.onCrawled({ 'from page': page, movieName, downloadLinks })
         } catch (error) {
             callbacks.onError({
-                error: error.response.body,
+                error: error,
                 url,
                 page
             })
@@ -67,20 +91,32 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
 
     }
 
+
+
     async function crawl() {
         console.log('crawling started')
         let page = getPage.next()
         const regx = /سریال/
         const regx2 = /[a-zA-Z]/
         while (!page.done) {
+            console.log(threads)
             const url = baseURL + "/page/" + page.value + "/"
             console.log(url)
             const mainPageScrapper = scrapeMainPage(url)
             let link = await mainPageScrapper.next()
-
             while (!link.done) {
                 if (!regx.test(link.value) && regx2.test(link.value)) {
-                    await crawlSinglePage(link.value, page.value)
+
+                    if (threads < maxThreads) {
+                        threads++
+                        console.log('adding thread')
+                        crawlSinglePage(link.value, page.value)
+                    } else {
+                        threads--
+                        console.log('removing thread')
+                        await crawlSinglePage(link.value, page.value)
+                    }
+
                 }
                 link = await mainPageScrapper.next()
             }
