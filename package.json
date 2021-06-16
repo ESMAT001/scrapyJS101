@@ -1,0 +1,11 @@
+{
+  "name": "nodeJsMovieScrapper",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^0.21.1",
+    "got": "^11.8.2",
+    "jsdom": "^16.6.0"
+  }
+}
