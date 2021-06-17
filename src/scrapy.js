@@ -20,6 +20,38 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
     })()
 
     let extractDownloadLinks = function (nodes) {
+
+        function recursiveDlLinkExractor(el) {
+
+            for (let index = 0; index < el.children.length; index++) {
+                if (el.children[index].nodeName === "A") {
+                    return el.children[index].href
+                } else {
+                    const link = recursiveDlLinkExractor(el.children[index])
+                    if (link) return link;
+                }
+            }
+
+            return;
+        }
+
+        function extractLinks(chunk) {
+            const downloadIdentifier = /با کیفیت/
+            const englishLangRegx = /[a-zA-Z 0-9]/g
+            const dlLinks = []
+            for (let i = 0; i < chunk.length; i++) {
+                if (downloadIdentifier.test(chunk[i].textContent)) {
+                    const quality = chunk[i].textContent.match(englishLangRegx).join("").trim()
+                    dlLinks.push({
+                        quality,
+                        downloadLinks: recursiveDlLinkExractor(chunk[i + 1])
+                    })
+                }
+            }
+            return dlLinks;
+        }
+
+
         let startIndex = null
         let endIndex = null
         for (let index = 0; index < nodes.length; index++) {
@@ -29,7 +61,38 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
                 endIndex = index
             }
         }
-        return Array.from(nodes).slice(startIndex, endIndex);
+
+        let links = Array.from(nodes).slice(startIndex, endIndex)
+        const indexes = []
+        const persianSubtitle = /زیرنویس چسبیده فارسی/
+        const dualLang = /نسخه دوبله فارسی/
+        let subLang = undefined
+        for (let index = 0; index < links.length; index++) {
+            if (links[index].nodeName === "DIV") {
+
+                indexes.push(index)
+                if (persianSubtitle.test(links[index].textContent)) {
+                    subLang = "persian_sub"
+                } else if (dualLang.test(links[index].textContent)) {
+                    subLang = "dual_lang"
+                }
+            }
+        }
+
+
+        let downloadLinks = {}
+        if (dualLang.test(links[0].textContent) && indexes.length < 3) {
+            downloadLinks.persian_lang = extractLinks(links)
+        } else if (!subLang) {
+            downloadLinks.original_lang = extractLinks(links)
+        } else {
+            downloadLinks = {
+                [subLang]: extractLinks(links.slice(indexes[0], indexes[1])),
+                original_lang: extractLinks(links.slice(indexes[1], indexes[2])),
+            }
+        }
+
+        return downloadLinks;
     }
 
     const callbacks = {}
@@ -64,7 +127,7 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
 
 
     async function crawlSinglePage(url, page) {
-        console.log('from',page,'crawling',url)
+        console.log('from', page, 'crawling', url)
         try {
 
             var html = await got(url, {
@@ -77,7 +140,10 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
 
             const downloadLinks = extractDownloadLinks(nodes)
 
-            return callbacks.onCrawled({ 'from page': page, movieName, downloadLinks })
+            return callbacks.onCrawled({
+                movie_name: movieName,
+                download_links: downloadLinks
+            })
         } catch (error) {
             callbacks.onError({
                 error: error,
@@ -122,14 +188,15 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
         console.log('crawling started')
         let page = getPage.next()
         const regx = /سریال/
-        const regx2 = /[a-zA-Z]/
+        const regx2 = /[a-zA-Z]/g
         while (!page.done) {
             const url = baseURL + "/page/" + page.value + "/"
-            console.log('threads',threads,url)
+            console.log('threads', threads, url)
             const mainPageScrapper = scrapeMainPage(url)
             let link = await mainPageScrapper.next()
             while (!link.done) {
-                if (!regx.test(link.value) && regx2.test(link.value)) {
+
+                if (!regx.test(decodeURI(link.value)) && regx2.test(decodeURI(link.value))) {
 
                     if (threads < maxThreads) {
                         threads++
@@ -141,6 +208,8 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
                         await crawlSinglePage(link.value, page.value)
                     }
 
+                } else {
+                    // console.log('skipped ', decodeURI(link.value))
                 }
                 link = await mainPageScrapper.next()
             }

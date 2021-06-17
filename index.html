@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style media="all">
+        #myElement {
+            position: fixed;
+            right: 0;
+            bottom: 0;
+            min-width: 100%;
+            min-height: 100%;
+            width: 100% !important
+        }
+    </style>
+</head>
+
+<body>
+    <div id="myElement"></div>
+    <script src="https://30movie.ir/jwplayer/jwplayer.js"></script>
+    <script type="text/javascript">jwplayer.key = "TSYXAACcgCfQ+wmHUK2uFCQ87zAHktuyESHy65Gb+Lg=";</script>
+    <script type="text/javascript">
+        var playerInstance = jwplayer("myElement");
+        playerInstance.setup({
+
+            playlist: [{
+                image: "https://30movie.ir/wp-content/uploads/2021/01/aks_player.jpg",
+                tracks: [{
+                    'default': true,
+                    kind: 'subtitles', label: 'زیرنویس فارسی',
+                    file: 'https://30movie.ir/wp-content/uploads/2021/01/Ralph_Breaks_the_Internet_2018_1080p.srt'
+                },],
+
+                sources: [
+
+                    {
+                        file: "https://dl16.ftk.pw/user/shahab3/film/Mortal.Kombat.2021.720p.BluRay.Film2Movie_Asia.mkv",
+                        type: 'mp4',
+                        label: 'Bluray 480p دوبله فارسی',
+                    }
+                    ,
+
+                    {
+                        file: 'https://dl.30movie.ir/Ralph-2018/Ralph.Breaks.the.Internet.2018.720p.Farsi.Dubbed.30movie.ir.mkv',
+                        type: 'mp4',
+                        label: 'Bluray 720p دوبله فارسی',
+                    }
+                    ,
+
+                    {
+                        file: 'https://dl.30movie.ir/Ralph-2018/Ralph.Breaks.the.Internet.2018.1080p.Farsi.Dubbed.30movie.ir.mkv',
+                        type: 'mp4',
+                        label: 'Bluray 1080p دوبله فارسی',
+                    }
+                    ,
+
+                    {
+                        file: 'https://dl.30movie.ir/Ralph-2018/Ralph.Breaks.the.Internet.2018.480p.Pahe.30movie.ir.mkv',
+                        type: 'mp4',
+                        label: 'Bluray 480p زبان اصلی',
+                    }
+                    ,
+
+                    {
+                        file: 'https://dl.30movie.ir/Ralph-2018/Ralph.Breaks.the.Internet.2018.720p.MkvCage.30movie.ir.mkv',
+                        type: 'mp4',
+                        label: 'Bluray 720p زبان اصلی',
+                    }
+                    ,
+
+                    {
+                        file: 'https://dl.30movie.ir/Ralph-2018/Ralph.Breaks.the.Internet.2018.1080p.6CH.MkvCage.30movie.ir.mkv',
+                        type: 'mp4',
+                        label: 'Bluray 1080p زبان اصلی',
+                    }
+                    ,
+
+                ],
+
+            }],
+
+        });
+        jwplayer().onDisplayClick(function () { jwplayer().setFullscreen(true); });</script>
+</body>
+
+</html>
