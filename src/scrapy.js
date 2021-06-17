@@ -1,5 +1,6 @@
 const axios = require('axios');
 const got = require('got')
+const fs = require("fs")
 const jsdom = require("jsdom");
 const { JSDOM } = jsdom;
 
@@ -135,10 +136,16 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
             })
             const dom = new JSDOM(html.body)
             const movieName = dom.window.document.querySelector(options.nameSelector).textContent.match(englishLangRegx).join("").trim()
-            
+
             const nodes = dom.window.document.querySelectorAll(options.downloadLinkSelector)
 
             const downloadLinks = extractDownloadLinks(nodes)
+
+            if (downloadLinks.length === 0) {
+                fs.appendFileSync('./noMedia.txt', movieName + "\n", function (err) {
+                    if (err) throw err;
+                })
+            }
 
             return callbacks.onCrawled({
                 movie_name: movieName,
@@ -192,6 +199,8 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
         while (!page.done) {
             const url = baseURL + "/page/" + page.value + "/"
             // console.log('threads', threads, url)
+
+
             const mainPageScrapper = scrapeMainPage(url)
             let link = await mainPageScrapper.next()
             while (!link.done) {
@@ -213,6 +222,11 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
                 }
                 link = await mainPageScrapper.next()
             }
+
+            fs.appendFileSync('./page.txt', page.value.toString() + "\n", function (err) {
+                if (err) throw err;
+            })
+
             page = getPage.next()
 
         }

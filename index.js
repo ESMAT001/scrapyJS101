@@ -10,8 +10,8 @@ const dbName = 'media'
 
 
 
-const firstPage = 1
-const lastPage = 2
+const firstPage =1
+const lastPage = 100
 
 const spider = scrapyJS(baseURL, firstPage, lastPage, {
     nameSelector: 'div.content > div > p',
