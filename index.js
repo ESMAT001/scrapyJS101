@@ -10,8 +10,8 @@ const dbName = 'media'
 
 
 
-const firstPage = 300
-const lastPage = 320
+const firstPage = 1
+const lastPage = 2
 
 const spider = scrapyJS(baseURL, firstPage, lastPage, {
     nameSelector: 'div.content > div > p',
@@ -32,10 +32,10 @@ spider.on("error", (error) => {
 MongoClient.connect(dbURL, { useNewUrlParser: true, useUnifiedTopology: true })
     .then(client => {
         const db = client.db(dbName)
-
+        console.log('connected ')
         spider.on('crawled', (data) => {
             db.collection("movies").insertOne(data)
-                .then(result => console.log('inserted!', result.ops[0].movie_name, ++count))
+                .then(result => console.log('inserted!', result.ops))
                 .catch(error => console.log('error on insertion :', error))
         })
 

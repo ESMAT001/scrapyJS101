@@ -10,7 +10,7 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
     const maxThreads = options.maxThreads || 8
     const retryLimit = options.retryLimit || 40
     const timeOutLimit = options.timeOutLimit * 1000 || 20 * 1000
-
+    const englishLangRegx = /[a-zA-Z 0-9]/g
 
     const getPage = (function* nextPage() {
         let index = firstPage;
@@ -37,7 +37,6 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
 
         function extractLinks(chunk) {
             const downloadIdentifier = /با کیفیت/
-            const englishLangRegx = /[a-zA-Z 0-9]/g
             const dlLinks = []
             for (let i = 0; i < chunk.length; i++) {
                 if (downloadIdentifier.test(chunk[i].textContent)) {
@@ -127,7 +126,7 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
 
 
     async function crawlSinglePage(url, page) {
-        console.log('from', page, 'crawling', url)
+        // console.log('from', page, 'crawling', url)
         try {
 
             var html = await got(url, {
@@ -135,7 +134,8 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
                 timeout: timeOutLimit
             })
             const dom = new JSDOM(html.body)
-            const movieName = dom.window.document.querySelector(options.nameSelector).textContent
+            const movieName = dom.window.document.querySelector(options.nameSelector).textContent.match(englishLangRegx).join("").trim()
+            
             const nodes = dom.window.document.querySelectorAll(options.downloadLinkSelector)
 
             const downloadLinks = extractDownloadLinks(nodes)
@@ -191,7 +191,7 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
         const regx2 = /[a-zA-Z]/g
         while (!page.done) {
             const url = baseURL + "/page/" + page.value + "/"
-            console.log('threads', threads, url)
+            // console.log('threads', threads, url)
             const mainPageScrapper = scrapeMainPage(url)
             let link = await mainPageScrapper.next()
             while (!link.done) {
