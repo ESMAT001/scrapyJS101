@@ -10,14 +10,14 @@ const dbName = 'media'
 
 
 
-const firstPage =1
-const lastPage = 100
+const firstPage = 819
+const lastPage = 1395
 
 const spider = scrapyJS(baseURL, firstPage, lastPage, {
     nameSelector: 'div.content > div > p',
     downloadLinkSelector: "div.content > *",
     mainPageLinkSelector: 'div.title > h2 > a',
-    maxThreads: 10
+    maxThreads: 8
 })
 
 spider.on('finished', () => {
@@ -38,7 +38,7 @@ MongoClient.connect(dbURL, { useNewUrlParser: true, useUnifiedTopology: true })
                 .then(result => console.log('inserted!', result.ops))
                 .catch(error => console.log('error on insertion :', error))
         })
-
+        // spider.crawlSinglePage('https://www.film2movie.asia/53376/%d8%af%d8%a7%d9%86%d9%84%d9%88%d8%af-%d9%81%db%8c%d9%84%d9%85-blood-honey-2017/',818)
         spider.crawl()
 
 

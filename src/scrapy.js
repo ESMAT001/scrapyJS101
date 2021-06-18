@@ -20,79 +20,88 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
         }
     })()
 
-    let extractDownloadLinks = function (nodes) {
+    let extractDownloadLinks = function (nodes,url) {
+        try {
+            function recursiveDlLinkExractor(el) {
+                
 
-        function recursiveDlLinkExractor(el) {
+                for (let index = 0; index < el.children.length; index++) {
+                    if (el.children[index].nodeName === "A") {
+                        return el.children[index].href
+                    } else {
+                        const link = recursiveDlLinkExractor(el.children[index])
+                        if (link) return link;
+                    }
+                }
 
-            for (let index = 0; index < el.children.length; index++) {
-                if (el.children[index].nodeName === "A") {
-                    return el.children[index].href
-                } else {
-                    const link = recursiveDlLinkExractor(el.children[index])
-                    if (link) return link;
+                return;
+            }
+
+            function extractLinks(chunk) {
+                const downloadIdentifier = /با کیفیت/
+                const dlLinks = []
+                for (let i = 0; i < chunk.length; i++) {
+                    if (downloadIdentifier.test(chunk[i].textContent)) {
+                        const quality = chunk[i].textContent.match(englishLangRegx).join("").trim()
+                        dlLinks.push({
+                            quality,
+                            downloadLinks: recursiveDlLinkExractor(chunk[i + 1])
+                        })
+                    }
+                }
+                return dlLinks;
+            }
+
+
+            let startIndex = null
+            let endIndex = null
+            for (let index = 0; index < nodes.length; index++) {
+                if (nodes[index].nodeName === "H3" && startIndex === null) {
+                    startIndex = ++index
+                } else if (nodes[index].nodeName === "HR" && endIndex === null) {
+                    endIndex = index
                 }
             }
 
-            return;
-        }
+            let links = Array.from(nodes).slice(startIndex, endIndex)
+            const indexes = []
+            const persianSubtitle = /زیرنویس چسبیده فارسی/
+            const dualLang = /نسخه دوبله فارسی/
+            let subLang = undefined
+            for (let index = 0; index < links.length; index++) {
+                if (links[index].nodeName === "DIV") {
 
-        function extractLinks(chunk) {
-            const downloadIdentifier = /با کیفیت/
-            const dlLinks = []
-            for (let i = 0; i < chunk.length; i++) {
-                if (downloadIdentifier.test(chunk[i].textContent)) {
-                    const quality = chunk[i].textContent.match(englishLangRegx).join("").trim()
-                    dlLinks.push({
-                        quality,
-                        downloadLinks: recursiveDlLinkExractor(chunk[i + 1])
-                    })
+                    indexes.push(index)
+                    if (persianSubtitle.test(links[index].textContent)) {
+                        subLang = "persian_sub"
+                    } else if (dualLang.test(links[index].textContent)) {
+                        subLang = "dual_lang"
+                    }
                 }
             }
-            return dlLinks;
-        }
 
 
-        let startIndex = null
-        let endIndex = null
-        for (let index = 0; index < nodes.length; index++) {
-            if (nodes[index].nodeName === "H3" && startIndex === null) {
-                startIndex = ++index
-            } else if (nodes[index].nodeName === "HR" && endIndex === null) {
-                endIndex = index
-            }
-        }
-
-        let links = Array.from(nodes).slice(startIndex, endIndex)
-        const indexes = []
-        const persianSubtitle = /زیرنویس چسبیده فارسی/
-        const dualLang = /نسخه دوبله فارسی/
-        let subLang = undefined
-        for (let index = 0; index < links.length; index++) {
-            if (links[index].nodeName === "DIV") {
-
-                indexes.push(index)
-                if (persianSubtitle.test(links[index].textContent)) {
-                    subLang = "persian_sub"
-                } else if (dualLang.test(links[index].textContent)) {
-                    subLang = "dual_lang"
+            let downloadLinks = {}
+            if (dualLang.test(links[0].textContent) && indexes.length < 3) {
+                downloadLinks.persian_lang = extractLinks(links)
+            } else if (!subLang) {
+                downloadLinks.original_lang = extractLinks(links)
+            } else {
+                downloadLinks = {
+                    [subLang]: extractLinks(links.slice(indexes[0], indexes[1])),
+                    original_lang: extractLinks(links.slice(indexes[1], indexes[2])),
                 }
             }
+
+            return downloadLinks;
+
+        } catch (error) {
+            fs.appendFileSync('./error.txt', url + "\n", function (err) {
+                if (err) throw err;
+            })
+            return "error"
         }
 
-
-        let downloadLinks = {}
-        if (dualLang.test(links[0].textContent) && indexes.length < 3) {
-            downloadLinks.persian_lang = extractLinks(links)
-        } else if (!subLang) {
-            downloadLinks.original_lang = extractLinks(links)
-        } else {
-            downloadLinks = {
-                [subLang]: extractLinks(links.slice(indexes[0], indexes[1])),
-                original_lang: extractLinks(links.slice(indexes[1], indexes[2])),
-            }
-        }
-
-        return downloadLinks;
     }
 
     const callbacks = {}
@@ -139,7 +148,7 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
 
             const nodes = dom.window.document.querySelectorAll(options.downloadLinkSelector)
 
-            const downloadLinks = extractDownloadLinks(nodes)
+            const downloadLinks = extractDownloadLinks(nodes,url)
 
             if (downloadLinks.length === 0) {
                 fs.appendFileSync('./noMedia.txt', movieName + "\n", function (err) {
