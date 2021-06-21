@@ -1,6 +1,7 @@
 const scrapyJS = require('./src/scrapy')
-
+const fs = require('fs')
 const mongodb = require("mongodb")
+
 const MongoClient = mongodb.MongoClient
 
 
@@ -30,19 +31,51 @@ spider.on("error", (error) => {
 
 
 MongoClient.connect(dbURL, { useNewUrlParser: true, useUnifiedTopology: true })
-    .then(client => {
+    .then(async client => {
         const db = client.db(dbName)
         console.log('connected ')
         spider.on('crawled', (data) => {
-            db.collection("movies").insertOne(data)
-                .then(result => console.log('inserted!', result.ops))
-                .catch(error => console.log('error on insertion :', error))
+            console.log(data)
+            // db.collection("movies").insertOne(data)
+            //     .then(result => console.log('inserted!', result.ops))
+            //     .catch(error => console.log('error on insertion :', error))
         })
-       
-        spider.crawl()
 
+
+        async function insert({ id, data }) {
+            id = parseInt(id, data.data)
+            console.log(id)
+            if (await db.collection("movie").findOne({ id })) return;
+            
+            let movieData = await db.collection("tmdb").findOne({ id })
+
+
+            if (!movieData) return;
+
+            movieData.download_links = data.download_links
+            const imgPath = 'https://image.tmdb.org/t/p/w500'
+            movieData.backdrop_path = imgPath + movieData.backdrop_path
+            movieData.poster_path = imgPath + movieData.poster_path
+            await db.collection("movie").insertOne(movieData)
+            console.log(id, data.movie_name, 'inserted')
+
+
+        }
+        spider.readFile('notFound.txt', async function (line) {
+            const data = await spider.search(line, db)
+            if (data.data) await insert(data);
+        })
+
+
+        //         // spider.crawl()
+
+        //         // spider.crawlSinglePage("https://www.film2movie.asia/97001/%d8%af%d8%a7%d9%86%d9%84%d9%88%d8%af-%d8%b3%d8%b1%db%8c%d8%a7%d9%84-zack-snyders-justice-league/")
 
     })
+
+
+
+
 
 
 

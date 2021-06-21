@@ -1,15 +1,15 @@
-const axios = require('axios');
 const got = require('got')
 const fs = require("fs")
-const jsdom = require("jsdom");
-const { JSDOM } = jsdom;
+const readLine = require('readline')
+const { JSDOM } = require("jsdom");
+
 
 
 
 const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = {}) {
     let threads = 0
     const maxThreads = options.maxThreads || 8
-    const retryLimit = options.retryLimit || 40
+    const retryLimit = options.retryLimit || 4
     const timeOutLimit = options.timeOutLimit * 1000 || 20 * 1000
     const englishLangRegx = /[a-zA-Z 0-9]/g
 
@@ -20,10 +20,10 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
         }
     })()
 
-    let extractDownloadLinks = function (nodes,url) {
+    let extractDownloadLinks = function (nodes, url) {
         try {
             function recursiveDlLinkExractor(el) {
-                
+
 
                 for (let index = 0; index < el.children.length; index++) {
                     if (el.children[index].nodeName === "A") {
@@ -135,8 +135,7 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
 
 
 
-    async function crawlSinglePage(url, page) {
-        // console.log('from', page, 'crawling', url)
+    async function crawlSinglePage(url, page = 1, shouldReturn = false) {
         try {
 
             var html = await got(url, {
@@ -148,7 +147,7 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
 
             const nodes = dom.window.document.querySelectorAll(options.downloadLinkSelector)
 
-            const downloadLinks = extractDownloadLinks(nodes,url)
+            const downloadLinks = extractDownloadLinks(nodes, url)
 
             if (downloadLinks.length === 0) {
                 fs.appendFileSync('./noMedia.txt', movieName + "\n", function (err) {
@@ -156,17 +155,24 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
                 })
             }
 
-            return callbacks.onCrawled({
+            const result = {
                 movie_name: movieName,
                 download_links: downloadLinks
-            })
+            }
+
+            if (shouldReturn) {
+                return result
+            } else {
+                return callbacks.onCrawled(result)
+            }
+
         } catch (error) {
-            callbacks.onError({
+            return callbacks.onError({
                 error: error,
                 url,
                 page
             })
-            return crawlSinglePage(url, page)
+
         }
 
     }
@@ -243,13 +249,96 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
         return callbacks.onFinished() ? callbacks.onFinished !== undefined : undefined
     }
 
+    let found = 0
+    let searched = 0
+
+    async function search(name, db = false) {
+
+        if (db) {
+            const temp = name
+            name = name.split(" ")
+            const pageNumber = name.shift()
+            const id = name.shift()
+            const movieDate = name.pop()
+
+            name = name.join(" ").replaceAll(/[.()*']/g, '').replaceAll(/[-]/g, " ").replaceAll(/[&]/g, 'and')
+            let dbData
+            if (name.indexOf(":") === -1) {
+                const lineRegx = new RegExp(name, 'i')
+                const dateRegx = new RegExp(movieDate, 'g')
+                dbData = await db.collection("movies").findOne({
+                    $and: [
+                        { movie_name: lineRegx },
+                        { movie_name: dateRegx }
+                    ]
+                })
+                if (dbData) {
+                    found++
+                    fs.appendFileSync('found.txt', id + " " + dbData.movie_name + "\n")
+                }
+
+            }
+            searched++
+
+            // console.log('found', found, 'searched', searched)
+            return { id, data: dbData }
+
+        } else {
+            const url = 'https://www.film2movie.asia/search/' + encodeURI(name)
+            console.log(url)
+            try {
+                var html = await got(url, {
+                    retry: { limit: retryLimit },
+                    timeout: timeOutLimit
+                })
+            } catch (error) {
+                return callbacks.onError({
+                    error,
+                    url
+                })
+            }
+            const dom = new JSDOM(html.body);
+            console.log('searched main page')
+            let links = dom.window.document.querySelectorAll(options.mainPageLinkSelector)
+            if (links.length === 0) {
+                const notFoundRegx = /مورد درخواستی در این سایت وجود ندارد/
+                links = dom.window.document.querySelectorAll(options.notFoundSelector)
+                if (notFoundRegx.test(links[0].textContent)) {
+                    fs.appendFileSync('./notFound.txt', name)
+                }
+            } else {
+                const movieNameRegx = new RegExp(name, 'i')
+                for (let index = 0; index < links.length; index++) {
+                    if (movieNameRegx.test(decodeURI(links[index].href).replaceAll("-", ' '))) {
+                        console.log('found', decodeURI(links[index].href))
+                        await crawlSinglePage(links[index].href)
+                        break;
+                    }
+                }
+            }
+
+        }
+
+
+    }
+
+    function readFile(filePath, callback) {
+        var lineReader = readLine.createInterface({
+            input: fs.createReadStream(filePath)
+        });
+        lineReader.on('line', async function (line) {
+            await callback(line)
+        });
+    }
 
 
     return {
         crawl,
         on,
         override,
-        crawlSinglePage
+        crawlSinglePage,
+        search,
+        readFile
     }
 }
 
