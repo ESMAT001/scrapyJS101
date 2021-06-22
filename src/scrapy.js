@@ -133,9 +133,14 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
     }
 
 
-
-
-    async function crawlSinglePage(url, page = 1, shouldReturn = false) {
+    async function crawlSinglePage(
+        url,
+        shouldReturn = false,
+        {
+            nameSelector = options.nameSelector,
+            downloadLinkSelector = options.downloadLinkSelector
+        } = {}
+    ) {
         try {
 
             var html = await got(url, {
@@ -143,9 +148,8 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
                 timeout: timeOutLimit
             })
             const dom = new JSDOM(html.body)
-            const movieName = dom.window.document.querySelector(options.nameSelector).textContent.match(englishLangRegx).join("").trim()
-
-            const nodes = dom.window.document.querySelectorAll(options.downloadLinkSelector)
+            const movieName = dom.window.document.querySelector(nameSelector).textContent.match(englishLangRegx).join("").trim()
+            const nodes = dom.window.document.querySelectorAll(downloadLinkSelector)
 
             const downloadLinks = extractDownloadLinks(nodes, url)
 
@@ -169,8 +173,7 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
         } catch (error) {
             return callbacks.onError({
                 error: error,
-                url,
-                page
+                url
             })
 
         }
@@ -203,9 +206,6 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
     }
 
 
-
-
-
     async function crawl() {
         console.log('crawling started')
         let page = getPage.next()
@@ -225,11 +225,11 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
                     if (threads < maxThreads) {
                         threads++
                         console.log('adding thread')
-                        crawlSinglePage(link.value, page.value)
+                        crawlSinglePage(link.value)
                     } else {
                         threads--
                         console.log('removing thread')
-                        await crawlSinglePage(link.value, page.value)
+                        await crawlSinglePage(link.value)
                     }
 
                 } else {
@@ -249,19 +249,135 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
         return callbacks.onFinished() ? callbacks.onFinished !== undefined : undefined
     }
 
-    let found = 0
-    let searched = 0
+
+    async function searchFirstSite(name, shouldReturn = false) {
+        console.log(name)
+        const url = 'https://www.film2movie.asia/search/' + encodeURI(name)
+        console.log(url)
+        try {
+            var html = await got(url, {
+                retry: { limit: retryLimit },
+                timeout: timeOutLimit
+            })
+        } catch (error) {
+            return callbacks.onError({
+                error,
+                url
+            })
+        }
+        const dom = new JSDOM(html.body);
+        console.log('searched main page')
+        let links = dom.window.document.querySelectorAll(options.mainPageLinkSelector)
+        if (links.length === 0) {
+            const notFoundRegx = /مورد درخواستی در این سایت وجود ندارد/
+            links = dom.window.document.querySelectorAll(options.notFoundSelector)
+            if (notFoundRegx.test(links[0].textContent)) {
+                fs.appendFileSync('./notFound.txt', name)
+            }
+        } else {
+            const movieNameRegx = new RegExp(name, 'i')
+            for (let index = 0; index < links.length; index++) {
+                if (movieNameRegx.test(decodeURI(links[index].href).replaceAll("-", ' '))) {
+                    console.log('found', decodeURI(links[index].href))
+                    return await crawlSinglePage(links[index].href, shouldReturn)
+                }
+            }
+        }
+
+
+
+    }
+
+
+    function extractDownloadLinksForSecondSite(nodes, url) {
+        console.log(url)
+        console.log(nodes)
+    }
+
+
+    async function searchSecondSite(name, shouldReturn = false) {
+        const originl_name = name
+        const url = "https://www.film2serial.ir/?s="
+        const regx = /[():'`]/g
+        name = name.split("")
+        for (let index = 0; index < name.length; index++) {
+            if (regx.test(name[index])) {
+                switch (name[index]) {
+                    case "'":
+                        name[index] = "%27"
+                        break;
+                    case "(":
+                        name[index] = "%28"
+                        break;
+                    case ")":
+                        name[index] = "%29"
+                        break;
+                    default:
+                        name[index] = encodeURIComponent(name[index])
+                        break;
+                }
+            }
+        }
+        name = name.join("").replaceAll(" ", "+")
+
+        try {
+            var html = await got(url + name, {
+                retry: { limit: retryLimit },
+                timeout: timeOutLimit
+            })
+        } catch (error) {
+            return callbacks.onError({
+                error,
+                url
+            })
+        }
+        const document = new JSDOM(html.body).window.document;
+
+        const links = document.querySelectorAll("div.post > div.title > h3 > a")
+
+
+        let data = null;
+
+        for (let index = 0; index < links.length; index++) {
+            if (
+                new RegExp(originl_name, 'i').test(links[index].textContent)
+                &&
+                new RegExp("دانلود", 'i').test(links[index].textContent)
+            ) {
+                console.log('found', links[index].href)
+
+                const oldFn = extractDownloadLinks
+                override('extractDownloadLinks', extractDownloadLinksForSecondSite)
+                data = await crawlSinglePage(links[index].href, true,
+                    {
+                        nameSelector: "div.post > div.title",
+                        downloadLinkSelector: "div.contents > *"
+                    }
+                )
+                override('extractDownloadLinks', oldFn)
+                break;
+            }
+        }
+
+        // if (links.length === 0) return console.log('not found');
+
+
+        // console.log(dom.window.document.querySelector("title").textContent)
+
+
+
+    }
 
     async function search(name, db = false) {
+        const temp = name
+        name = name.split(" ")
+        const pageNumber = name.shift()
+        const id = name.shift()
+        const movieDate = name.pop()
+
+        name = name.join(" ").replaceAll(/[.()*']/g, '').replaceAll(/[-]/g, " ").replaceAll(/[&]/g, 'and')
 
         if (db) {
-            const temp = name
-            name = name.split(" ")
-            const pageNumber = name.shift()
-            const id = name.shift()
-            const movieDate = name.pop()
-
-            name = name.join(" ").replaceAll(/[.()*']/g, '').replaceAll(/[-]/g, " ").replaceAll(/[&]/g, 'and')
             let dbData
             if (name.indexOf(":") === -1) {
                 const lineRegx = new RegExp(name, 'i')
@@ -273,50 +389,18 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
                     ]
                 })
                 if (dbData) {
-                    found++
                     fs.appendFileSync('found.txt', id + " " + dbData.movie_name + "\n")
                 }
 
             }
-            searched++
-
             // console.log('found', found, 'searched', searched)
             return { id, data: dbData }
 
         } else {
-            const url = 'https://www.film2movie.asia/search/' + encodeURI(name)
-            console.log(url)
-            try {
-                var html = await got(url, {
-                    retry: { limit: retryLimit },
-                    timeout: timeOutLimit
-                })
-            } catch (error) {
-                return callbacks.onError({
-                    error,
-                    url
-                })
-            }
-            const dom = new JSDOM(html.body);
-            console.log('searched main page')
-            let links = dom.window.document.querySelectorAll(options.mainPageLinkSelector)
-            if (links.length === 0) {
-                const notFoundRegx = /مورد درخواستی در این سایت وجود ندارد/
-                links = dom.window.document.querySelectorAll(options.notFoundSelector)
-                if (notFoundRegx.test(links[0].textContent)) {
-                    fs.appendFileSync('./notFound.txt', name)
-                }
-            } else {
-                const movieNameRegx = new RegExp(name, 'i')
-                for (let index = 0; index < links.length; index++) {
-                    if (movieNameRegx.test(decodeURI(links[index].href).replaceAll("-", ' '))) {
-                        console.log('found', decodeURI(links[index].href))
-                        await crawlSinglePage(links[index].href)
-                        break;
-                    }
-                }
-            }
-
+            // let data = await searchFirstSite(name + " " + movieDate, true)
+            let data = await searchSecondSite(name + " " + movieDate, true)
+            console.log('from searhc')
+            console.log(data)
         }
 
 
