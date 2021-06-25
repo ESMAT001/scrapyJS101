@@ -300,11 +300,21 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
             if (new RegExp('آموزش سوئیچ بین صدای فارسی و انگلیسی').test(element.textContent)) {
                 condition = "dual"
                 return;
-            } else if (new RegExp('نسخه دوبله فارسی سانسور شده').test(element.textContent)) {
+            } else if (
+                new RegExp('نسخه دوبله فارسی سانسور شده').test(element.textContent)
+                ||
+                new RegExp('نسخه سانسور شده با دوبله فارسی').test(element.textContent)
+            ) {
+                let found = false;
                 for (let index = 0; index < nodes.length; index++) {
                     if (new RegExp("نسخه سانسور شده با زیرنویس فارسی چسبیده").test(nodes[index].textContent)) {
-                        condition = 'per&original_lang'
+                        found = true;
                     }
+                }
+                if (found) {
+                    condition = 'per&original_lang'
+                } else {
+                    condition = 'persian_lang'
                 }
             }
         });
@@ -326,16 +336,59 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
                 original_lang: dlLinks
             }
         } else if (condition === "per&original_lang") {
-            let persian_lang =[]
-            let original_lang=[]
+            let persian_lang = []
+            let original_lang = []
+            let insertTo;
+            for (let index = 0; index < nodes.length; index++) {
+                if (
+                    new RegExp('نسخه دوبله فارسی سانسور شده').test(nodes[index].textContent)
+                    ||
+                    new RegExp('نسخه سانسور شده با دوبله فارسی').test(nodes[index].textContent)
+                ) {
+                    insertTo = 'persian_lang'
+                } else if (new RegExp("نسخه سانسور شده با زیرنویس فارسی چسبیده").test(nodes[index].textContent)) {
+                    insertTo = 'original_lang'
+                }
 
-            for (let index = 0; index < array.length; index++) {
-                const element = array[index];
-                
+                if (nodes[index].textContent === '~~~~~~~~~~~~~~') {
+                    if (insertTo === 'persian_lang') {
+                        persian_lang.push({
+                            quality: nodes[index + 1].textContent,
+                            downloadLinks: nodes[index + 2].children[1].children[0].href
+                        })
+                    } else {
+                        original_lang.push({
+                            quality: nodes[index + 1].textContent,
+                            downloadLinks: nodes[index + 2].children[1].children[0].href
+                        })
+                    }
+
+                }
+            }
+
+            const result = {
+                persian_lang,
+                original_lang
             }
 
 
+            return result;
 
+
+        } else if (condition === "persian_lang") {
+            const dlLinks = []
+            for (let index = 0; index < nodes.length; index++) {
+                if (nodes[index].textContent === '~~~~~~~~~~~~~~') {
+
+                    dlLinks.push({
+                        quality: nodes[index + 1].textContent,
+                        downloadLinks: nodes[index + 2].children[1].children[0].href
+                    })
+                }
+            }
+            return {
+                persian_lang: dlLinks
+            }
         } else {
             let parts = []
             let indexes = []
