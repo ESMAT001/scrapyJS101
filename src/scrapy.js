@@ -163,7 +163,6 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
                 movie_name: movieName,
                 download_links: downloadLinks
             }
-            console.log(result)
 
             if (shouldReturn) {
                 return result
@@ -199,7 +198,6 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
         const dom = new JSDOM(html.body);
         const links = dom.window.document.querySelectorAll(options.mainPageLinkSelector)
 
-        console.log('main page scrapped')
 
         for (let index = 0; index < links.length; index++) {
             yield links[index].href
@@ -252,9 +250,7 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
 
 
     async function searchFirstSite(name, shouldReturn = false) {
-        console.log(name)
         const url = 'https://www.film2movie.asia/search/' + encodeURI(name)
-        console.log(url)
         try {
             var html = await got(url, {
                 retry: { limit: retryLimit },
@@ -267,7 +263,6 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
             })
         }
         const dom = new JSDOM(html.body);
-        console.log('searched main page')
         let links = dom.window.document.querySelectorAll(options.mainPageLinkSelector)
         if (links.length === 0) {
             const notFoundRegx = /مورد درخواستی در این سایت وجود ندارد/
@@ -291,8 +286,7 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
 
 
     function extractDownloadLinksForSecondSite(nodes, url) {
-        console.log('extract download links for second', url)
-        // console.log(nodes)
+
         nodes = Array.from(nodes)
         let condition = false;
 
@@ -316,6 +310,8 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
                 } else {
                     condition = 'persian_lang'
                 }
+            } else if (new RegExp('نسخه سانسور شده با زیرنویس فارسی چسبیده').test(element.textContent)) {
+                condition = 'persian_sub'
             }
         });
 
@@ -324,10 +320,9 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
         if (condition === "dual") {
             const dlLinks = []
             for (let index = 0; index < nodes.length; index++) {
-                if (nodes[index].textContent === '~~~~~~~~~~~~~~') {
-
+                if (nodes[index].textContent === '~~~~~~~~~~~~~~' && nodes[index + 2].childElementCount) {
                     dlLinks.push({
-                        quality: nodes[index + 1].textContent,
+                        quality: nodes[index + 1].textContent.match(englishLangRegx).join("").trim(),
                         downloadLinks: nodes[index + 2].children[1].children[0].href
                     })
                 }
@@ -353,12 +348,12 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
                 if (nodes[index].textContent === '~~~~~~~~~~~~~~') {
                     if (insertTo === 'persian_lang') {
                         persian_lang.push({
-                            quality: nodes[index + 1].textContent,
+                            quality: nodes[index + 1].textContent.match(englishLangRegx).join("").trim(),
                             downloadLinks: nodes[index + 2].children[1].children[0].href
                         })
                     } else {
                         original_lang.push({
-                            quality: nodes[index + 1].textContent,
+                            quality: nodes[index + 1].textContent.match(englishLangRegx).join("").trim(),
                             downloadLinks: nodes[index + 2].children[1].children[0].href
                         })
                     }
@@ -379,44 +374,33 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
             const dlLinks = []
             for (let index = 0; index < nodes.length; index++) {
                 if (nodes[index].textContent === '~~~~~~~~~~~~~~') {
-
                     dlLinks.push({
-                        quality: nodes[index + 1].textContent,
+                        quality: nodes[index + 1].textContent.match(englishLangRegx).join("").trim(),
                         downloadLinks: nodes[index + 2].children[1].children[0].href
                     })
+                } else if (nodes[index].textContent === '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~') {
+                    break;
                 }
             }
             return {
                 persian_lang: dlLinks
             }
-        } else {
-            let parts = []
-            let indexes = []
+        } else if (condition === 'persian_sub') {
+            const dlLinks = []
             for (let index = 0; index < nodes.length; index++) {
-                if (nodes[index].textContent === '~~~~~~~~~~~~~~' && nodes[index - 1].innerHTML !== "&nbsp;") {
-                    indexes.push({
-                        index,
-                        info: nodes[index - 1].textContent
+                if (nodes[index].textContent === '~~~~~~~~~~~~~~') {
+                    dlLinks.push({
+                        quality: nodes[index + 1].textContent.match(englishLangRegx).join("").trim(),
+                        downloadLinks: nodes[index + 2].children[1].children[0].href
                     })
+                } else if (nodes[index].textContent === '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~') {
+                    break;
                 }
             }
-            let start = 0
-            for (let index = 0; index < indexes.length; index++) {
-                parts.push({
-                    partName: indexes[index].info,
-                    part: nodes.slice(start, indexes[index].index)
-                })
-                start = indexes[index].index
+            return {
+                persian_sub: dlLinks
             }
-            console.log(parts)
         }
-
-
-
-
-
-
-
 
     }
 
@@ -495,50 +479,72 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
     }
 
     async function search(name, db = false) {
-        const temp = name
+        console.log(name)
         name = name.split(" ")
         const pageNumber = name.shift()
         const id = name.shift()
         const movieDate = name.pop()
-
+        
+        let temp = name.join(" ").replaceAll(/[.*']/g, '').replaceAll(/[-]/g, " ").replaceAll(/[&]/g, 'and')
         name = name.join(" ").replaceAll(/[.()*']/g, '').replaceAll(/[-]/g, " ").replaceAll(/[&]/g, 'and')
 
         if (db) {
             let dbData
-            if (name.indexOf(":") === -1) {
-                const lineRegx = new RegExp(name, 'i')
-                const dateRegx = new RegExp(movieDate, 'g')
+            let tempName = name
+            if (tempName.indexOf(":") !== -1) { tempName = tempName.slice(0, tempName.indexOf(":")) }
+
+            const lineRegx = new RegExp(tempName, 'i')
+            const dateRegx = new RegExp(movieDate, 'g')
+            dbData = await db.collection("movies").findOne({
+                $and: [
+                    { movie_name: lineRegx },
+                    { movie_name: dateRegx }
+                ]
+            })
+
+            if (dbData) {
+                // console.log('from db')
+                return { id, data: dbData }
+            } else if (temp.indexOf("(") !== -1) {
+                tempName = temp.slice(0, temp.indexOf("("))
                 dbData = await db.collection("movies").findOne({
                     $and: [
-                        { movie_name: lineRegx },
+                        { movie_name: new RegExp(tempName, 'i') },
                         { movie_name: dateRegx }
                     ]
                 })
-                if (dbData) {
-                    fs.appendFileSync('found.txt', id + " " + dbData.movie_name + "\n")
-                }
+                if (dbData) return { id, data: dbData };
+            };
 
-            }
-            // console.log('found', found, 'searched', searched)
-            return { id, data: dbData }
-
-        } else {
-            // let data = await searchFirstSite(name + " " + movieDate, true)
-            let data = await searchSecondSite(name + " " + movieDate, true)
-            console.log('from searhc')
-            console.log(data)
         }
+
+        let data = await searchFirstSite(name + " " + movieDate, true)
+        if (!data) {
+            // console.log('not found in first going to second site')
+            data = await searchSecondSite(name + " " + movieDate, true)
+        };
+        return { id, data, fromSite: true };
+
 
 
     }
 
-    function readFile(filePath, callback) {
-        var lineReader = readLine.createInterface({
-            input: fs.createReadStream(filePath)
-        });
-        lineReader.on('line', async function (line) {
-            await callback(line)
-        });
+    async function readFile(filePath, callback) {
+
+        try {
+
+            const data = fs.readFileSync(filePath, 'UTF-8');
+
+            const lines = data.split(/\r?\n/);
+
+            for (let index = 0; index < lines.length; index++) {
+                await callback(lines[index]);
+            }
+        } catch (error) {
+            return callbacks.onError({
+                error: error
+            })
+        }
     }
 
 

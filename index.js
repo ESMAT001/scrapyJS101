@@ -18,6 +18,7 @@ const spider = scrapyJS(baseURL, firstPage, lastPage, {
     nameSelector: 'div.content > div > p',
     downloadLinkSelector: "div.content > *",
     mainPageLinkSelector: 'div.title > h2 > a',
+    notFoundSelector: "div.box > div.title",
     maxThreads: 8
 })
 
@@ -43,31 +44,32 @@ MongoClient.connect(dbURL, { useNewUrlParser: true, useUnifiedTopology: true })
         })
 
 
-        // async function insert({ id, data }) {
-        //     id = parseInt(id)
-        //     console.log(id, data.movie_name)
-        //     if (await db.collection("movie").findOne({ id })) return;
-
-        //     let movieData = await db.collection("tmdb").findOne({ id })
-
-
-        //     if (!movieData) return;
-
-        //     movieData.download_links = data.download_links
-        //     const imgPath = 'https://image.tmdb.org/t/p/w500'
-        //     movieData.backdrop_path = imgPath + movieData.backdrop_path
-        //     movieData.poster_path = imgPath + movieData.poster_path
-        //     await db.collection("movie").insertOne(movieData)
-        //     console.log(id, data.movie_name, 'inserted')
+        async function insert({ id, data, fromSite }) {
+            id = parseInt(id)
+            console.log(id, data.movie_name, fromSite)
+            fs.appendFileSync('./foundData.txt', id + " " + data.movie_name + " " + fromSite)
+            if (fromSite) db.collection("movies").insertOne(data);
+            if (await db.collection("movie").findOne({ id })) return;
+            let movieData = await db.collection("tmdb").findOne({ id })
 
 
-        // }
-        // spider.readFile('notFound.txt', async function (line) {
-        //     const data = await spider.search(line, db)
-        //     if (data.data) await insert(data);
-        // })
+            if (!movieData) return;
 
-        spider.search("3 587807 Tom and Jerry 2021")
+            movieData.download_links = data.download_links
+            const imgPath = 'https://image.tmdb.org/t/p/w500'
+            movieData.backdrop_path = imgPath + movieData.backdrop_path
+            movieData.poster_path = imgPath + movieData.poster_path
+            await db.collection("movie").insertOne(movieData)
+            console.log(id, data.movie_name, 'inserted')
+        }
+
+        spider.readFile('notFound.txt', async function (line) {
+            const data = await spider.search(line, db)
+            // console.log(data)
+            if (data.data) await insert(data);
+        })
+
+        // spider.search("3 529203 The Fate of the Furious 2017")
 
         //         // spider.crawl()
 
