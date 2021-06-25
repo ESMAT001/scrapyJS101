@@ -268,7 +268,7 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
             const notFoundRegx = /مورد درخواستی در این سایت وجود ندارد/
             links = dom.window.document.querySelectorAll(options.notFoundSelector)
             if (notFoundRegx.test(links[0].textContent)) {
-                fs.appendFileSync('./notFound.txt', name)
+                fs.appendFileSync('./notFound.txt', name+"\n")
             }
         } else {
             const movieNameRegx = new RegExp(name, 'i')
@@ -484,7 +484,7 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
         const pageNumber = name.shift()
         const id = name.shift()
         const movieDate = name.pop()
-        
+
         let temp = name.join(" ").replaceAll(/[.*']/g, '').replaceAll(/[-]/g, " ").replaceAll(/[&]/g, 'and')
         name = name.join(" ").replaceAll(/[.()*']/g, '').replaceAll(/[-]/g, " ").replaceAll(/[&]/g, 'and')
 

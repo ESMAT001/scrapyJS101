@@ -28,6 +28,8 @@ spider.on('finished', () => {
 
 spider.on("error", (error) => {
     console.log(error)
+
+    if (error.url) fs.appendFileSync('./newError.txt', error.url + "\n");
 })
 
 
@@ -47,7 +49,7 @@ MongoClient.connect(dbURL, { useNewUrlParser: true, useUnifiedTopology: true })
         async function insert({ id, data, fromSite }) {
             id = parseInt(id)
             console.log(id, data.movie_name, fromSite)
-            fs.appendFileSync('./foundData.txt', id + " " + data.movie_name + " " + fromSite)
+            fs.appendFileSync('./foundData.txt', id + " " + data.movie_name + " " + fromSite + "\n")
             if (fromSite) db.collection("movies").insertOne(data);
             if (await db.collection("movie").findOne({ id })) return;
             let movieData = await db.collection("tmdb").findOne({ id })
@@ -63,7 +65,7 @@ MongoClient.connect(dbURL, { useNewUrlParser: true, useUnifiedTopology: true })
             console.log(id, data.movie_name, 'inserted')
         }
 
-        spider.readFile('notFound.txt', async function (line) {
+        spider.readFile('notFoundBase.txt', async function (line) {
             const data = await spider.search(line, db)
             // console.log(data)
             if (data.data) await insert(data);
