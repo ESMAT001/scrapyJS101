@@ -163,6 +163,7 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
                 movie_name: movieName,
                 download_links: downloadLinks
             }
+            console.log(result)
 
             if (shouldReturn) {
                 return result
@@ -290,8 +291,80 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
 
 
     function extractDownloadLinksForSecondSite(nodes, url) {
-        console.log(url)
-        console.log(nodes)
+        console.log('extract download links for second', url)
+        // console.log(nodes)
+        nodes = Array.from(nodes)
+        let condition = false;
+
+        nodes.forEach(element => {
+            if (new RegExp('آموزش سوئیچ بین صدای فارسی و انگلیسی').test(element.textContent)) {
+                condition = "dual"
+                return;
+            } else if (new RegExp('نسخه دوبله فارسی سانسور شده').test(element.textContent)) {
+                for (let index = 0; index < nodes.length; index++) {
+                    if (new RegExp("نسخه سانسور شده با زیرنویس فارسی چسبیده").test(nodes[index].textContent)) {
+                        condition = 'per&original_lang'
+                    }
+                }
+            }
+        });
+
+
+
+        if (condition === "dual") {
+            const dlLinks = []
+            for (let index = 0; index < nodes.length; index++) {
+                if (nodes[index].textContent === '~~~~~~~~~~~~~~') {
+
+                    dlLinks.push({
+                        quality: nodes[index + 1].textContent,
+                        downloadLinks: nodes[index + 2].children[1].children[0].href
+                    })
+                }
+            }
+            return {
+                original_lang: dlLinks
+            }
+        } else if (condition === "per&original_lang") {
+            let persian_lang =[]
+            let original_lang=[]
+
+            for (let index = 0; index < array.length; index++) {
+                const element = array[index];
+                
+            }
+
+
+
+        } else {
+            let parts = []
+            let indexes = []
+            for (let index = 0; index < nodes.length; index++) {
+                if (nodes[index].textContent === '~~~~~~~~~~~~~~' && nodes[index - 1].innerHTML !== "&nbsp;") {
+                    indexes.push({
+                        index,
+                        info: nodes[index - 1].textContent
+                    })
+                }
+            }
+            let start = 0
+            for (let index = 0; index < indexes.length; index++) {
+                parts.push({
+                    partName: indexes[index].info,
+                    part: nodes.slice(start, indexes[index].index)
+                })
+                start = indexes[index].index
+            }
+            console.log(parts)
+        }
+
+
+
+
+
+
+
+
     }
 
 
@@ -355,7 +428,7 @@ const scrapyJS = function (baseURL = {}, firstPage = 1, lastPage = 1, options = 
                     }
                 )
                 override('extractDownloadLinks', oldFn)
-                break;
+                return data
             }
         }
 
